@@ -84,26 +84,29 @@ boolean connectWIFI=true;
 
 unsigned long currentMillis = 0;
 
-const int oledInterval = 5000;
+const int oledInterval = 1000; // 5000
 unsigned long previousOled = 0;
 
 const int sendToServerInterval = 10000;
 unsigned long previoussendToServer = 0;
 
-const int tvocInterval = 1000;
+const int tvocInterval = 1000; // 5000
 unsigned long previousTVOC = 0;
 int TVOC = 0;
 int NOX = 0;
 
-const int co2Interval = 5000;
+const int co2Interval = 1000; // 5000
 unsigned long previousCo2 = 0;
 int Co2 = 0;
 
-const int pm25Interval = 5000;
+const int pm25Interval = 1000; // 5000
 unsigned long previousPm25 = 0;
 int pm25 = 0;
+int pm01 = 0;
+int pm10 = 0;
+int pm003_count = 0;
 
-const int tempHumInterval = 2500;
+const int tempHumInterval = 5000;
 unsigned long previousTempHum = 0;
 float temp = 0;
 int hum = 0;
@@ -116,7 +119,6 @@ unsigned long releasedTime = 0;
 
 void setup() {
   Serial.begin(115200);
-  Serial.println("Hello");
   u8g2.begin();
   //u8g2.setDisplayRotation(U8G2_R0);
 
@@ -153,10 +155,10 @@ void setup() {
 void loop() {
   currentMillis = millis();
   updateTVOC();
-  updateOLED();
   updateCo2();
   updatePm25();
   updateTempHum();
+  drawScreen();
   sendToServer();
 }
 
@@ -201,8 +203,8 @@ void inConf(){
 
   }
   lastState = currentState;
-  delay(100);
-  inConf();
+//  delay(100);
+//  inConf();
 }
 
 
@@ -280,15 +282,15 @@ void updateTVOC()
         error = sgp41.executeConditioning(compensationRh, compensationT, srawVoc);
         conditioning_s--;
     } else {
-        error = sgp41.measureRawSignals(compensationRh, compensationT, srawVoc,
-                                        srawNox);
+        error = sgp41.measureRawSignals(compensationRh, compensationT, srawVoc, srawNox);
     }
 
     if (currentMillis - previousTVOC >= tvocInterval) {
       previousTVOC += tvocInterval;
       TVOC = voc_algorithm.process(srawVoc);
       NOX = nox_algorithm.process(srawNox);
-      Serial.println(String(TVOC));
+//      Serial.println(String(TVOC));
+//      Serial.println(String(NOX)); 
     }
 }
 
@@ -297,7 +299,7 @@ void updateCo2()
     if (currentMillis - previousCo2 >= co2Interval) {
       previousCo2 += co2Interval;
       Co2 = ag.getCO2_Raw();
-      Serial.println(String(Co2));
+//      Serial.println(String(Co2));
     }
 }
 
@@ -306,7 +308,10 @@ void updatePm25()
     if (currentMillis - previousPm25 >= pm25Interval) {
       previousPm25 += pm25Interval;
       pm25 = ag.getPM2_Raw();
-      Serial.println(String(pm25));
+      pm01 = ag.getPM1_Raw();
+      pm10 = ag.getPM10_Raw();
+      pm003_count = ag.getPM0_3Count();
+//      Serial.println(String(pm25));
     }
 }
 
@@ -317,7 +322,7 @@ void updateTempHum()
       TMP_RH result = ag.periodicFetchData();
       temp = result.t;
       hum = result.rh;
-      Serial.println(String(temp));
+//      Serial.println(String(temp));
     }
 }
 
@@ -357,12 +362,80 @@ void updateOLED2(String ln1, String ln2, String ln3) {
     } while ( u8g2.nextPage() );
 }
 
+
+// Constants for the Arduino-built screens
+// Width of the text characters
+#define WIDTH_TEXT 6
+// Width of the numbers
+#define WIDTH_NUM 11
+// Width of the last row
+#define WIDTH_GARAGE 9
+// Additional offset for the text to give it a bit more space
+#define TEXT_OFFSET 2
+// 3 rows - the start of each row
+#define ROW1_Y 21
+#define ROW2_Y 42
+#define ROW3_Y 63
+
+void drawScreen() {
+
+  if (currentMillis - previousOled >= oledInterval) {
+    previousOled += oledInterval;
+    
+    String s_aqi = String(pm25);
+    String s_co2 = String(Co2);
+    String s_tvoc = String(TVOC);
+    String s_nox = String(NOX);
+    String s_temp = String(temp, 1);
+    String s_hum = String(hum) + "%";
+  
+    u8g2.firstPage();
+    do {
+      int aqi_x = 60 - (WIDTH_TEXT * 3);
+      int co2_x = 128 - (WIDTH_TEXT * 3);
+      int tvoc_x = 4 + 64 - (WIDTH_TEXT * 4); // add a bit more offset
+      int nox_x = 128 - (WIDTH_TEXT * 3);
+      int f_x = 64 - (WIDTH_TEXT * 2); // add a bit more offset
+      int h_x = 128 - (WIDTH_TEXT * 3);
+      u8g2.setFont(u8g2_font_t0_11_tf);
+      u8g2.drawStr(aqi_x, ROW1_Y, "PM2");
+      u8g2.drawStr(co2_x, ROW1_Y, "CO2");
+  
+      u8g2.drawStr(tvoc_x, ROW2_Y, "TVoC");
+      u8g2.drawStr(nox_x, ROW2_Y, "NOX");
+  
+      u8g2.drawStr(f_x - 4, ROW3_Y - 8, "o");
+      u8g2.drawStr(f_x, ROW3_Y, "C");
+      u8g2.drawStr(h_x, ROW3_Y, "H2O");
+  
+      u8g2.setFont(u8g2_font_t0_22b_tr);
+  
+      u8g2.drawStr(aqi_x - TEXT_OFFSET - (WIDTH_NUM * s_aqi.length()), ROW1_Y,
+                   s_aqi.c_str());
+      u8g2.drawStr(co2_x - TEXT_OFFSET - (WIDTH_NUM * s_co2.length()), ROW1_Y,
+                   s_co2.c_str());
+      u8g2.drawStr(tvoc_x - TEXT_OFFSET - (WIDTH_NUM * s_tvoc.length()), ROW2_Y,
+                   s_tvoc.c_str());
+      u8g2.drawStr(nox_x - TEXT_OFFSET - (WIDTH_NUM * s_nox.length()), ROW2_Y,
+                   s_nox.c_str());
+      u8g2.drawStr(f_x - TEXT_OFFSET - 4 - (WIDTH_NUM * s_temp.length()), ROW3_Y,
+                   s_temp.c_str());
+      u8g2.drawStr(h_x - TEXT_OFFSET - (WIDTH_NUM * s_hum.length()), ROW3_Y,
+                   s_hum.c_str());
+  
+    } while (u8g2.nextPage());
+  }
+}
+
 void sendToServer() {
    if (currentMillis - previoussendToServer >= sendToServerInterval) {
      previoussendToServer += sendToServerInterval;
       String payload = "{\"wifi\":" + String(WiFi.RSSI())
       + (Co2 < 0 ? "" : ", \"rco2\":" + String(Co2))
       + (pm25 < 0 ? "" : ", \"pm02\":" + String(pm25))
+      + (pm01 < 0 ? "" : ", \"pm01\":" + String(pm01))
+      + (pm10 < 0 ? "" : ", \"pm10\":" + String(pm10))
+      + (pm003_count < 0 ? "" : ", \"pm003_count\":" + String(pm003_count))
       + (TVOC < 0 ? "" : ", \"tvoc_index\":" + String(TVOC))
       + (NOX < 0 ? "" : ", \"nox_index\":" + String(NOX))
       + ", \"atmp\":" + String(temp)
@@ -372,15 +445,15 @@ void sendToServer() {
       if(WiFi.status()== WL_CONNECTED){
         Serial.println(payload);
         String POSTURL = APIROOT + "sensors/airgradient:" + String(ESP.getChipId(), HEX) + "/measures";
-        Serial.println(POSTURL);
+//        Serial.println(POSTURL);
         WiFiClient client;
         HTTPClient http;
         http.begin(client, POSTURL);
         http.addHeader("content-type", "application/json");
         int httpCode = http.POST(payload);
         String response = http.getString();
-        Serial.println(httpCode);
-        Serial.println(response);
+//        Serial.println(httpCode);
+//        Serial.println(response);
         http.end();
       }
       else {
