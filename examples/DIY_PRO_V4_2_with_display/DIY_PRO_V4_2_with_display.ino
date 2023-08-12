@@ -117,6 +117,8 @@ int currentState;
 unsigned long pressedTime  = 0;
 unsigned long releasedTime = 0;
 
+float AQIindex = 0;
+
 void setup() {
   Serial.begin(115200);
   u8g2.begin();
@@ -158,6 +160,7 @@ void loop() {
   updateCo2();
   updatePm25();
   updateTempHum();
+  updateAQIindex();
   drawScreen();
   sendToServer();
 }
@@ -326,6 +329,88 @@ void updateTempHum()
     }
 }
 
+void updateAQIindex()
+{
+  int pm25_index = 0;
+  int NOX_index = 0;
+  int TVOC_index = 0;
+  int Co2_index = 0;
+  
+  if (pm25 <= 10) {
+    pm25_index = 0;
+  } else if (pm25 <= 15) {
+    pm25_index = 1;
+  } else if (pm25 <= 25) {
+    pm25_index = 2;
+  } else if (pm25 <= 35) {
+    pm25_index = 3;
+  } else if (pm25 <= 55) {
+    pm25_index = 4;
+  } else if (pm25 > 55) {
+    pm25_index = 5;
+  }
+  
+  if (NOX <= 50) {
+    NOX_index = 0;
+  } else if (NOX <= 100) {
+    NOX_index = 1;
+  } else if (NOX <= 150) {
+    NOX_index = 2;
+  } else if (NOX <= 200) {
+    NOX_index = 3;
+  } else if (NOX <= 300) {
+    NOX_index = 4;
+  } else if (NOX > 300) {
+    NOX_index = 5;
+  }
+  
+  if (TVOC <= 50) {
+    TVOC_index = 0;
+  } else if (TVOC <= 100) {
+    TVOC_index = 1;
+  } else if (TVOC <= 150) {
+    TVOC_index = 2;
+  } else if (TVOC <= 200) {
+    TVOC_index = 3;
+  } else if (TVOC <= 500) {
+    TVOC_index = 4;
+  } else if (TVOC > 500) {
+    TVOC_index = 5;
+  }
+  
+  if (Co2 <= 400) {
+    Co2_index = 0;
+  } else if (Co2 <= 700) {
+    Co2_index = 1;
+  } else if (Co2 <= 1000) {
+    Co2_index = 2;
+  } else if (Co2 <= 1500) {
+    Co2_index = 3;
+  } else if (Co2 <= 2000) {
+    Co2_index = 4;
+  } else if (Co2 > 2000) {
+    Co2_index = 5;
+  }
+
+//  Serial.println("");
+//  Serial.println(String(pm25));
+//  Serial.println(String(pm25_index));
+//  Serial.println("");
+//  Serial.println(String(NOX));
+//  Serial.println(String(NOX_index));
+//  Serial.println("");
+//  Serial.println(String(TVOC));
+//  Serial.println(String(TVOC_index));
+//  Serial.println("");
+//  Serial.println(String(Co2));
+//  Serial.println(String(Co2_index));
+
+  AQIindex = ((pm25_index + NOX_index + TVOC_index + Co2_index) / 4.0);
+
+//  Serial.println("");
+//  Serial.println(String(AQIindex));
+}
+
 void updateOLED() {
    if (currentMillis - previousOled >= oledInterval) {
      previousOled += oledInterval;
@@ -388,6 +473,7 @@ void drawScreen() {
     String s_nox = String(NOX);
     String s_temp = String(temp, 1);
     String s_hum = String(hum) + "%";
+    String s_aqi_index = "";
   
     u8g2.firstPage();
     do {
@@ -395,8 +481,15 @@ void drawScreen() {
       int co2_x = 128 - (WIDTH_TEXT * 3);
       int tvoc_x = 4 + 64 - (WIDTH_TEXT * 4); // add a bit more offset
       int nox_x = 128 - (WIDTH_TEXT * 3);
-      int f_x = 64 - (WIDTH_TEXT * 2); // add a bit more offset
+      int t_x = 64 - (WIDTH_TEXT * 2); // add a bit more offset
       int h_x = 128 - (WIDTH_TEXT * 3);
+
+      u8g2.setFont(u8g2_font_5x8_tf);
+      for (int i = 0; i < round(AQIindex); i++) {
+        s_aqi_index += '*';
+      }
+      u8g2.drawStr(1,5, s_aqi_index.c_str());
+
       u8g2.setFont(u8g2_font_t0_11_tf);
       u8g2.drawStr(aqi_x, ROW1_Y, "PM2");
       u8g2.drawStr(co2_x, ROW1_Y, "CO2");
@@ -404,8 +497,8 @@ void drawScreen() {
       u8g2.drawStr(tvoc_x, ROW2_Y, "TVoC");
       u8g2.drawStr(nox_x, ROW2_Y, "NOX");
   
-      u8g2.drawStr(f_x - 4, ROW3_Y - 8, "o");
-      u8g2.drawStr(f_x, ROW3_Y, "C");
+      u8g2.drawStr(t_x - 4, ROW3_Y - 8, "o");
+      u8g2.drawStr(t_x, ROW3_Y, "C");
       u8g2.drawStr(h_x, ROW3_Y, "H2O");
   
       u8g2.setFont(u8g2_font_t0_22b_tr);
@@ -418,7 +511,7 @@ void drawScreen() {
                    s_tvoc.c_str());
       u8g2.drawStr(nox_x - TEXT_OFFSET - (WIDTH_NUM * s_nox.length()), ROW2_Y,
                    s_nox.c_str());
-      u8g2.drawStr(f_x - TEXT_OFFSET - 4 - (WIDTH_NUM * s_temp.length()), ROW3_Y,
+      u8g2.drawStr(t_x - TEXT_OFFSET - 4 - (WIDTH_NUM * s_temp.length()), ROW3_Y,
                    s_temp.c_str());
       u8g2.drawStr(h_x - TEXT_OFFSET - (WIDTH_NUM * s_hum.length()), ROW3_Y,
                    s_hum.c_str());
